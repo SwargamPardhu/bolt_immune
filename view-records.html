@@ -23,7 +23,6 @@
                 <li><a href="dashboard.html">Dashboard</a></li>
                 <li><a href="education.html">Education</a></li>
                 <li><a href="profile.html">Profile</a></li>
-                <li><a href="#" id="logoutBtn">Logout</a></li>
             </ul>
             <button class="nav-toggle">
                 <i class="fas fa-bars"></i>
@@ -133,12 +132,6 @@
                 return;
             }
             
-            // Setup logout functionality
-            document.getElementById('logoutBtn').addEventListener('click', (e) => {
-                e.preventDefault();
-                auth.logout();
-            });
-            
             loadChildren();
             setupEventListeners();
         });
@@ -170,13 +163,11 @@
                     } else {
                         // Get vaccination data for each child
                         for (let child of allChildren) {
-                            const vaccinationsResult = await vaccinationOperations.getChildVaccinations(child.id);
-                            child.vaccinations = vaccinationsResult.success ? vaccinationsResult.data : [];
+                            const scheduleResult = await scheduleOperations.getChildSchedule(child.id);
+                            child.schedule = scheduleResult.success ? scheduleResult.data : [];
                             
-                            // Generate schedule and calculate status
-                            const schedule = vaccineSchedule.generateSchedule(child.dateOfBirth);
-                            child.schedule = schedule;
-                            child.vaccinationStatus = calculateVaccinationStatus(child.vaccinations, schedule);
+                            // Calculate status from schedule
+                            child.vaccinationStatus = calculateVaccinationStatus(child.schedule);
                         }
                         
                         filteredChildren = [...allChildren];
@@ -191,8 +182,8 @@
             }
         }
         
-        function calculateVaccinationStatus(vaccinations, schedule) {
-            const completedVaccines = vaccinations.filter(v => v.administered).length;
+        function calculateVaccinationStatus(schedule) {
+            const completedVaccines = schedule.filter(v => v.completed).length;
             const totalVaccines = schedule.length;
             const dueVaccines = schedule.filter(v => v.status === 'due').length;
             const overdueVaccines = schedule.filter(v => v.status === 'overdue').length;
@@ -384,13 +375,13 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${child.vaccinations.slice(-5).map(vaccination => `
+                                ${child.schedule.slice(-5).map(schedule => `
                                     <tr>
-                                        <td>${vaccination.vaccine}</td>
-                                        <td>${vaccination.dateAdministered ? utils.formatDate(vaccination.dateAdministered) : 'Not administered'}</td>
+                                        <td>${schedule.vaccineName}</td>
+                                        <td>${schedule.dateCompleted ? utils.formatDate(schedule.dateCompleted) : 'Not administered'}</td>
                                         <td>
-                                            <span class="badge badge-${vaccination.administered ? 'success' : 'secondary'}">
-                                                ${vaccination.administered ? 'Completed' : 'Pending'}
+                                            <span class="badge badge-${schedule.completed ? 'success' : 'secondary'}">
+                                                ${schedule.completed ? 'Completed' : 'Pending'}
                                             </span>
                                         </td>
                                     </tr>

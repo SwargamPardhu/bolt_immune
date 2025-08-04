@@ -22,7 +22,7 @@
                 <li><a href="schedule.html">Schedule</a></li>
                 <li><a href="dashboard.html">Dashboard</a></li>
                 <li><a href="education.html">Education</a></li>
-                <li><a href="#" id="logoutBtn">Logout</a></li>
+                <li><a href="profile.html">Profile</a></li>
             </ul>
             <button class="nav-toggle">
                 <i class="fas fa-bars"></i>
@@ -220,12 +220,6 @@
                 return;
             }
             
-            // Setup logout functionality
-            document.getElementById('logoutBtn').addEventListener('click', (e) => {
-                e.preventDefault();
-                auth.logout();
-            });
-            
             // Get child ID from URL
             const urlParams = new URLSearchParams(window.location.search);
             const childId = urlParams.get('child');
@@ -277,8 +271,8 @@
                 currentChild = childResult.data;
                 
                 // Load vaccination history
-                const vaccinationsResult = await vaccinationOperations.getChildVaccinations(childId);
-                childVaccinations = vaccinationsResult.success ? vaccinationsResult.data : [];
+                const scheduleResult = await scheduleOperations.getChildSchedule(childId);
+                childVaccinations = scheduleResult.success ? scheduleResult.data.filter(s => s.completed) : [];
                 
                 // Populate form
                 populateForm();
@@ -344,8 +338,8 @@
                         <tbody>
                             ${sortedVaccinations.map(vaccination => `
                                 <tr>
-                                    <td><strong>${vaccination.vaccine}</strong></td>
-                                    <td>${formatDate(vaccination.dateAdministered)}</td>
+                                    <td><strong>${vaccination.vaccineName}</strong></td>
+                                    <td>${formatDate(vaccination.dateCompleted)}</td>
                                     <td>${vaccination.administeredBy || 'Not specified'}</td>
                                     <td>${vaccination.location || 'Not specified'}</td>
                                     <td>
@@ -525,8 +519,8 @@
             
             alert(`Vaccination Details:
             
-Vaccine: ${vaccination.vaccine}
-Date: ${formatDate(vaccination.dateAdministered)}
+Vaccine: ${vaccination.vaccineName}
+Date: ${formatDate(vaccination.dateCompleted)}
 Administered By: ${vaccination.administeredBy || 'Not specified'}
 Location: ${vaccination.location || 'Not specified'}
 Batch Number: ${vaccination.batchNumber || 'Not specified'}

@@ -28,7 +28,6 @@
                     <a href="schedule.html">Schedule</a>
                     <a href="education.html">Education</a>
                     <a href="profile.html">Profile</a>
-                    <a href="#" id="logoutBtn">Logout</a>
                 </li>
             </ul>
             <button class="nav-toggle">
@@ -196,11 +195,6 @@
             updateUIForAuth();
             loadQuickStats();
             
-            // Setup logout functionality
-            document.getElementById('logoutBtn').addEventListener('click', (e) => {
-                e.preventDefault();
-                auth.logout();
-            });
         });
         
         function updateUIForAuth() {
@@ -248,11 +242,12 @@
                 if (auth.isAuthenticated()) {
                     const [childrenResult, vaccinationsResult] = await Promise.all([
                         childOperations.getAllChildren(),
-                        vaccinationOperations.getAllVaccinations()
+                        scheduleOperations.getAllSchedules()
                     ]);
                     
                     totalChildren = childrenResult.success ? childrenResult.data.length : 0;
-                    totalVaccinations = vaccinationsResult.success ? vaccinationsResult.data.length : 0;
+                    totalVaccinations = vaccinationsResult.success ? 
+                        vaccinationsResult.data.filter(s => s.completed).length : 0;
                     
                     // Calculate completion rate
                     const expectedVaccinations = totalChildren * 12; // Assuming 12 vaccines per child

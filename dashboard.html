@@ -24,7 +24,6 @@
                 <li><a href="dashboard.html">Dashboard</a></li>
                 <li><a href="education.html">Education</a></li>
                 <li><a href="profile.html">Profile</a></li>
-                <li><a href="#" id="logoutBtn">Logout</a></li>
             </ul>
             <button class="nav-toggle">
                 <i class="fas fa-bars"></i>
@@ -184,7 +183,7 @@
     <script>
         let dashboardData = {
             children: [],
-            vaccinations: [],
+            schedules: [],
             statistics: {}
         };
         
@@ -195,12 +194,6 @@
             if (!auth.requireAuth()) {
                 return;
             }
-            
-            // Setup logout functionality
-            document.getElementById('logoutBtn').addEventListener('click', (e) => {
-                e.preventDefault();
-                auth.logout();
-            });
             
             loadDashboardData();
             setupEventListeners();
@@ -221,11 +214,11 @@
                 // Load children and vaccinations
                 const [childrenResult, vaccinationsResult] = await Promise.all([
                     childOperations.getAllChildren(),
-                    vaccinationOperations.getAllVaccinations()
+                    scheduleOperations.getAllSchedules()
                 ]);
                 
                 dashboardData.children = childrenResult.success ? childrenResult.data : [];
-                dashboardData.vaccinations = vaccinationsResult.success ? vaccinationsResult.data : [];
+                dashboardData.schedules = vaccinationsResult.success ? vaccinationsResult.data : [];
                 
                 // Calculate statistics
                 calculateStatistics();
@@ -247,8 +240,8 @@
         function calculateStatistics() {
             const stats = {
                 totalChildren: dashboardData.children.length,
-                totalVaccinations: dashboardData.vaccinations.filter(v => v.administered).length,
-                pendingVaccinations: dashboardData.vaccinations.filter(v => !v.administered).length,
+                totalVaccinations: dashboardData.schedules.filter(v => v.completed).length,
+                pendingVaccinations: dashboardData.schedules.filter(v => !v.completed).length,
                 overdueVaccinations: 0,
                 ageGroups: { '0-1': 0, '1-5': 0, '5+': 0 },
                 vaccineTypes: {},
@@ -262,24 +255,23 @@
                 if (age < 1) stats.ageGroups['0-1']++;
                 else if (age < 5) stats.ageGroups['1-5']++;
                 else stats.ageGroups['5+']++;
-                
-                // Generate schedule for each child to check overdue
-                const schedule = vaccineSchedule.generateSchedule(child.dateOfBirth);
-                stats.overdueVaccinations += schedule.filter(v => v.status === 'overdue').length;
             });
             
-            // Calculate vaccine types and monthly data
-            dashboardData.vaccinations.forEach(vaccination => {
-                if (vaccination.administered) {
+            // Calculate overdue from schedules
+            stats.overdueVaccinations = dashboardData.schedules.filter(s => s.status === 'overdue').length;
+            
+            // Calculate vaccine types and monthly data from schedules
+            dashboardData.schedules.forEach(schedule => {
+                if (schedule.completed) {
                     // Vaccine types
-                    if (!stats.vaccineTypes[vaccination.vaccine]) {
-                        stats.vaccineTypes[vaccination.vaccine] = 0;
+                    if (!stats.vaccineTypes[schedule.vaccineName]) {
+                        stats.vaccineTypes[schedule.vaccineName] = 0;
                     }
-                    stats.vaccineTypes[vaccination.vaccine]++;
+                    stats.vaccineTypes[schedule.vaccineName]++;
                     
                     // Monthly vaccinations
-                    if (vaccination.dateAdministered) {
-                        const month = new Date(vaccination.dateAdministered).toISOString().slice(0, 7);
+                    if (schedule.dateCompleted) {
+                        const month = new Date(schedule.dateCompleted).toISOString().slice(0, 7);
                         if (!stats.monthlyVaccinations[month]) {
                             stats.monthlyVaccinations[month] = 0;
                         }
@@ -289,10 +281,10 @@
                     // Recent activity
                     stats.recentActivity.push({
                         type: 'vaccination',
-                        vaccine: vaccination.vaccine,
-                        childId: vaccination.childId,
-                        date: vaccination.dateAdministered,
-                        createdAt: vaccination.createdAt
+                        vaccine: schedule.vaccineName,
+                        childId: schedule.childId,
+                        date: schedule.dateCompleted,
+                        createdAt: schedule.updatedAt || schedule.createdAt
                     });
                 }
             });
@@ -591,8 +583,8 @@
             // Generate overdue list
             const overdueList = [];
             dashboardData.children.forEach(child => {
-                const schedule = vaccineSchedule.generateSchedule(child.dateOfBirth);
-                const overdue = schedule.filter(v => v.status === 'overdue');
+                const childSchedules = dashboardData.schedules.filter(s => s.childId === child.id);
+                const overdue = childSchedules.filter(v => v.status === 'overdue');
                 overdue.forEach(vaccine => {
                     overdueList.push({
                         child: child,
@@ -614,7 +606,7 @@
             container.innerHTML = overdueList.slice(0, 10).map(item => `
                 <div style="padding: 0.75rem 0; border-bottom: 1px solid var(--gray-200);">
                     <div style="font-weight: 500; color: var(--error-500);">
-                        ${item.vaccine.name} - ${item.child.firstName} ${item.child.lastName}
+                        ${item.vaccine.vaccineName} - ${item.child.firstName} ${item.child.lastName}
                     </div>
                     <div style="font-size: 0.875rem; color: var(--gray-600);">
                         Due: ${utils.formatDate(item.vaccine.dueDate)}
@@ -640,24 +632,17 @@
                 };
             });
             
-            // Count actual vaccinations
-            dashboardData.children.forEach(child => {
-                const schedule = vaccineSchedule.generateSchedule(child.dateOfBirth);
-                const childVaccinations = dashboardData.vaccinations.filter(v => v.childId === child.id);
-                
-                schedule.forEach(scheduleItem => {
-                    const vaccination = childVaccinations.find(v => v.vaccine === scheduleItem.name && v.administered);
-                    
-                    if (vaccination) {
-                        vaccineStats[scheduleItem.name].completed++;
-                    } else {
-                        if (scheduleItem.status === 'due') {
-                            vaccineStats[scheduleItem.name].due++;
-                        } else if (scheduleItem.status === 'overdue') {
-                            vaccineStats[scheduleItem.name].overdue++;
-                        }
+            // Count from schedules
+            dashboardData.schedules.forEach(schedule => {
+                if (vaccineStats[schedule.vaccineName]) {
+                    if (schedule.completed) {
+                        vaccineStats[schedule.vaccineName].completed++;
+                    } else if (schedule.status === 'due') {
+                        vaccineStats[schedule.vaccineName].due++;
+                    } else if (schedule.status === 'overdue') {
+                        vaccineStats[schedule.vaccineName].overdue++;
                     }
-                });
+                }
             });
             
             tbody.innerHTML = Object.entries(vaccineStats).map(([vaccine, data]) => {
@@ -688,7 +673,7 @@
                 generatedAt: new Date().toISOString(),
                 summary: dashboardData.statistics,
                 children: dashboardData.children,
-                vaccinations: dashboardData.vaccinations
+                schedules: dashboardData.schedules
             };
             
             const dataStr = JSON.stringify(reportData, null, 2);
