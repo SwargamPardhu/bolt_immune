@@ -20,6 +20,10 @@ const childOperations = {
         createdAt: Date.now() 
       };
       await childRef.set(childWithId);
+      
+      // Initialize schedule for the child
+      await scheduleOperations.initializeSchedule(childId, childData.dateOfBirth);
+      
       return { success: true, id: childId, data: childWithId };
     } catch (error) {
       console.error('Error adding child:', error);
@@ -226,6 +230,128 @@ const vaccinationOperations = {
       return { success: true, data: allVaccinations };
     } catch (error) {
       console.error('Error getting all vaccinations:', error);
+      return { success: false, error: error.message };
+    }
+  }
+};
+
+// Schedule operations
+const scheduleOperations = {
+  // Initialize schedule for a child
+  async initializeSchedule(childId, birthDate) {
+    try {
+      const currentUser = auth.getCurrentUser();
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      
+      // Generate schedule based on birth date
+      const schedule = vaccineSchedule.generateSchedule(birthDate);
+      
+      // Save each vaccine as a separate record
+      const schedulePromises = schedule.map(async (vaccine, index) => {
+        const scheduleRef = database.ref(`schedules/${childId}`).push();
+        const scheduleId = scheduleRef.key;
+        
+        const scheduleItem = {
+          id: scheduleId,
+          childId: childId,
+          userId: currentUser.id,
+          vaccineName: vaccine.name,
+          vaccineDescription: vaccine.description,
+          ageMonths: vaccine.ageMonths,
+          ageText: vaccine.ageText,
+          dueDate: vaccine.dueDate,
+          status: vaccine.status,
+          completed: false,
+          dateCompleted: null,
+          administeredBy: null,
+          location: null,
+          batchNumber: null,
+          notes: null,
+          createdAt: Date.now()
+        };
+        
+        await scheduleRef.set(scheduleItem);
+        return scheduleItem;
+      });
+      
+      const scheduleItems = await Promise.all(schedulePromises);
+      return { success: true, data: scheduleItems };
+    } catch (error) {
+      console.error('Error initializing schedule:', error);
+      return { success: false, error: error.message };
+    }
+  },
+  
+  // Get schedule for a child
+  async getChildSchedule(childId) {
+    try {
+      const currentUser = auth.getCurrentUser();
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      
+      const snapshot = await database.ref(`schedules/${childId}`).orderByChild('ageMonths').once('value');
+      const scheduleItems = [];
+      
+      snapshot.forEach(itemSnapshot => {
+        const item = itemSnapshot.val();
+        if (item.userId === currentUser.id) {
+          scheduleItems.push(item);
+        }
+      });
+      
+      return { success: true, data: scheduleItems };
+    } catch (error) {
+      console.error('Error getting schedule:', error);
+      return { success: false, error: error.message };
+    }
+  },
+  
+  // Update schedule item (mark as completed)
+  async updateScheduleItem(childId, scheduleId, updates) {
+    try {
+      const currentUser = auth.getCurrentUser();
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      
+      await database.ref(`schedules/${childId}/${scheduleId}`).update({
+        ...updates,
+        updatedAt: Date.now()
+      });
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating schedule item:', error);
+      return { success: false, error: error.message };
+    }
+  },
+  
+  // Get all schedules for dashboard
+  async getAllSchedules() {
+    try {
+      const currentUser = auth.getCurrentUser();
+      if (!currentUser) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      
+      const snapshot = await database.ref('schedules').once('value');
+      const allSchedules = [];
+      
+      snapshot.forEach(childSnapshot => {
+        childSnapshot.forEach(scheduleSnapshot => {
+          const schedule = scheduleSnapshot.val();
+          if (schedule.userId === currentUser.id) {
+            allSchedules.push(schedule);
+          }
+        });
+      });
+      
+      return { success: true, data: allSchedules };
+    } catch (error) {
+      console.error('Error getting all schedules:', error);
       return { success: false, error: error.message };
     }
   }
